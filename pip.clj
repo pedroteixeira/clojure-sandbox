@@ -10,6 +10,12 @@ applicable to vectors."
   [f k & coll]
   (apply max-key f (map #(vec [(k %1) %2]) coll (range (count coll)))))
 
+(defn max-key-value
+  "Returns [key, value] where (f (k item)) is the greatest. Most applicable to vectors."
+  [f k & coll]
+  (apply max-key f (map #(vec [(k %1) %1]) coll)))
+
+
 
 (defn euclidian-distance
   [[x1 y1] [x2 y2]]
@@ -24,43 +30,43 @@ applicable to vectors."
 
 
 (defn max-distance
-  "Returns [distance, index of point] where distance is greatest."
+  "Returns [distance, index of point] where distance is greatest. The extremes are excluded from candidates so the index returned is offseted by 1. pre: to > from + 1."
   [series from to]
   (let [calc-dist (partial distance euclidian-distance (nth series from) (nth series to))]
-    (apply max-key-index first calc-dist (subvec series from (+ 1 to)))))
+    (apply max-key-index first calc-dist (subvec series (+ 1 from) to))))
 
 
 (def max-distance (memoize max-distance))
 
 
 (defn max-distance-over-intervals 
-  "Find pip for each interval, and returns [[distance index-point-in-interval] index-interval] for the interval where distance of the pip is the greatest."
+  "Find new candidate pip for each interval, and returns [[distance index-point-in-interval] interval] for the interval where distance of the pip is the greatest."
   [series pips]
   (let [candidate-intervals (filter (fn [[p1 p2]] (> p2 (+ 1 p1))) pips)]
     (when-not (empty? candidate-intervals)  
-      (apply max-key-index ffirst #(apply max-distance series %) candidate-intervals))))
+      (apply max-key-value ffirst #(apply max-distance series %) candidate-intervals))))
 
 
 (defn pip*
-  "Expect series as vector of points. pips is a vector of [start end] intervals which are defined by the important points extracted so far. Given the current intervals, this function chooses a new important point with max distance across all segments. The new point is used to split one of the current segments."
+  "Expect series as vector of points. pips is a set of [start end] intervals which are defined by the important points extracted so far. Given the current intervals, this function chooses a new important point with max distance across all segments. The new point is used to split one of the current segments."
   [series pips]
-  (if-let [[[_ relative-index-pip] index-interval] (max-distance-over-intervals series pips)]
-    (let [[p1 p2] (nth pips index-interval)
-	  index-new-pip (+ p1 relative-index-pip)]
-;split segment into two segments
-      (conj (assoc pips index-interval
-		   [p1 index-new-pip]) [index-new-pip p2]))))
+  (if-let [[[_ relative-index-pip] [p1 p2 :as interval-to-split]] (max-distance-over-intervals series pips)]
+    (let [index-new-pip (+ 1 p1 relative-index-pip)]
+      (conj (disj pips interval-to-split) 
+	    [p1 index-new-pip] [index-new-pip p2]))))
+
 
 (defn pip-seq
+  "Lazy strategy using a recursive definition."
   [series pips]
   (if-let [new-pips (pip* series pips)]
     (cons new-pips
 	  (lazy-seq (pip-seq series new-pips)))))
 
 (defn find-pips [series]
+  "The extreme points are given as the first set of PIPs."
   (let [extremes [0 (- (count series) 1)]]
-    (conj (pip-seq series [extremes]) extremes)))
-
+    (conj (pip-seq series #{extremes}) #{extremes})))
 
 
 
@@ -73,6 +79,8 @@ applicable to vectors."
 (deftest test-distance distance
   (testing "euclidian distance"
     (is (= (distance euclidian-distance [1 10] [100 26] [3 40]) 128.0716946647587))))
+
+
 
 
 
@@ -92,11 +100,11 @@ applicable to vectors."
 
 
   (def pips (find-pips series-example))
-  (sort-by first (last (take 10 pips)))
-;([0 12] [12 25] [25 26] [26 27] [27 59] [59 62] [62 75] [75 76] [76 77] [77 99])
+ 
+  (map (partial sort-by first) (take 15 pips))
+
 
   (sort-by first (last (take 20 pips)))
-;([0 12] [12 25] [25 26] [26 27] [27 42] [42 59] [59 62] [62 75] [75 76] [76 77] [77 99] [77 77] [77 77] [77 77] [77 77] [77 77] [77 77] [77 77] [77 77] [77 77])
 
 
 )
