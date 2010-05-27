@@ -1,6 +1,8 @@
 (ns pip
   "Implementation of Perceptually Important Points algorithm"
+  (:gen-class)
   (:require [clojure.contrib.math :as math])
+  (:use [incanter core charts processing])
   (:use clojure.test))
 
 
@@ -63,10 +65,54 @@ applicable to vectors."
     (cons new-pips
 	  (lazy-seq (pip-seq series new-pips)))))
 
-(defn find-pips [series]
-  "The extreme points are given as the first set of PIPs."
-  (let [extremes [0 (- (count series) 1)]]
-    (conj (pip-seq series #{extremes}) #{extremes})))
+
+
+
+(defn find-pips 
+  "Returns lazy sequence of segments defined by the indices of PIPs. The extreme points are given as the first set of PIPs."
+  ([series]  
+     (let [extremes [0 (- (count series) 1)]]
+       (conj (pip-seq series #{extremes}) #{extremes})))
+
+  ([k series] 
+     (sort (distinct (flatten (vec (last (take k (find-pips series)))))))))
+
+
+
+(defn animate-chart [k series]
+  (let [p (line-chart [] [])
+	v (view p)]
+    (doseq [pips (to-points (sort-pips (take k (find-pips series))) series)] 
+      (add-categories p 
+		      (flatten (map (fn [[ [x1 _] [x2 _]]] [x1 x2]) pips))
+		      (flatten (map (fn [[ [_ y1] [_ y2]]] [y1 y2]) pips)) )
+      (. Thread (sleep 500) ))))
+
+
+
+(defn sort-pips [pips] 
+  (map #(sort-by first %) pips))
+
+
+(defn to-points 
+  [pips-indices series]
+  (map #(map (fn [[p1 p2]] [(nth series p1) (nth series p2)]) %) pips-indices))
+
+
+
+
+
+(defn animate-chart [k series]
+  (let [p (line-chart [] [])
+	v (view p)]
+    (doseq [pips (to-points (sort-pips (take k (find-pips series))) series)] 
+      (add-categories p 
+		      (flatten (map (fn [[ [x1 _] [x2 _]]] [x1 x2]) pips))
+		      (flatten (map (fn [[ [_ y1] [_ y2]]] [y1 y2]) pips)) )
+      (. Thread (sleep 500) ))))
+
+
+
 
 
 
@@ -76,18 +122,21 @@ applicable to vectors."
 (deftest test-euclidian-distnace 
   (is (= (euclidian-distance [10 20] [5 15]) (math/sqrt 50) )))
 
-(deftest test-distance distance
+(deftest test-distance
   (testing "euclidian distance"
-    (is (= (distance euclidian-distance [1 10] [100 26] [3 40]) 128.0716946647587))))
+    (is (= (distance euclidian-distance [1 10] [100 26] [3 40]) 128.07169466475875))))
+
+(deftest test-max-distance 
+  (is (= (max-distance [[0 1] [1 5] [2 8]] 0 2) [7.28538328578604 0])))
 
 
 
 
 
-
-
-;example
+;examples
 (comment 
+  (run-tests)
+
   (def series-example-y [1,  2,  4,  10,  20,  1,  3 ,  1,  10,  1,  10,
 			 5, 30,  5,  1,  9,  13,  1,  0,  20,  1,  2,  4,  10,  5,  2,  50,
 			 0,  7,  8, 5,  4,  3,  2,  20,  1,  3 ,  1,  10,  1,  10,  5, 30,  5,
@@ -100,12 +149,17 @@ applicable to vectors."
 
 
   (def pips (find-pips series-example))
- 
+
   (map (partial sort-by first) (take 15 pips))
 
 
-  (sort-by first (last (take 20 pips)))
+  (find-pips 15 series-example)
+
+  (animate-chart 20 series-example)
+
+  )
 
 
-)
 
+(defn -main [& args]
+  (print args))
